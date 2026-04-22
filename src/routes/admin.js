@@ -1342,4 +1342,76 @@ router.get("/distribuicoes-carregamento", async (req, res) => {
   }
 });
 
+// ============================================
+// TENDÊNCIA DE MOVIMENTAÇÕES
+// ============================================
+
+// Retorna movimentações agrupadas por data (últimos 11 dias)
+// Usado para gráfico de tendência no dashboard
+router.get("/tendencia-movimentacoes", async (req, res) => {
+  const db = req.app.locals.db;
+
+  try {
+    // Gerar últimos 11 dias
+    const hoje = new Date();
+    const datas = [];
+    
+    for (let i = 10; i >= 0; i--) {
+      const data = new Date(hoje);
+      data.setDate(data.getDate() - i);
+      const dataStr = data.toISOString().split('T')[0]; // YYYY-MM-DD
+      datas.push(dataStr);
+    }
+
+    // Buscar dados agrupados por data
+    const tendencia = await db.all(`
+      SELECT 
+        DATE(m.data_movimento) as data,
+        SUM(ABS(m.quantidade_diferenca)) as quantidade,
+        COUNT(*) as total_movimentacoes,
+        GROUP_CONCAT(DISTINCT m.tipo) as tipos
+      FROM movimentacoes_estoque m
+      WHERE DATE(m.data_movimento) >= DATE('now', '-11 days')
+      GROUP BY DATE(m.data_movimento)
+      ORDER BY data ASC
+    `);
+
+    // Criar mapa para acesso rápido
+    const mapaResultados = {};
+    tendencia.forEach(item => {
+      mapaResultados[item.data] = item;
+    });
+
+    // Preencher dados faltantes com zeros
+    const resultado = datas.map(data => {
+      if (mapaResultados[data]) {
+        return {
+          data,
+          quantidade: mapaResultados[data].quantidade || 0,
+          total_movimentacoes: mapaResultados[data].total_movimentacoes || 0
+        };
+      } else {
+        return {
+          data,
+          quantidade: 0,
+          total_movimentacoes: 0
+        };
+      }
+    });
+
+    return res.status(200).json({
+      sucesso: true,
+      tendencia: resultado,
+      periodo_dias: 11
+    });
+
+  } catch (erro) {
+    console.error("Erro em GET /admin/tendencia-movimentacoes:", erro);
+    return res.status(500).json({
+      sucesso: false,
+      erro: "Erro ao buscar tendência de movimentações"
+    });
+  }
+});
+
 module.exports = router;

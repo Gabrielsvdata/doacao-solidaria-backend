@@ -456,6 +456,28 @@ Este projeto demonstra:
 
 ---
 
+## 🏛️ Instituições Padrão
+
+O sistema vem pré-configurado com 3 instituições de referência:
+
+| ID | Nome | Endereço | CEP |
+|----|------|----------|-----|
+| 1 | CRAS Jóquei Clube | Av. Senador Salgado Filho, 224 - Jóquei Clube, São Vicente - SP | 11310-100 |
+| 2 | CRAS São Vicente | Av. Marechal Deodoro, 169 - Vila Valença, São Vicente - SP | 11310-200 |
+| 3 | CRAS Humaitá | Rua Vinte e Quatro, 135 - Parque Continental, São Vicente - SP | 11310-300 |
+
+**Categorias de Alimentos Monitoradas:**
+- Alimentos (kg)
+- Água (litros)
+- Roupas (peças)
+- Higiene (peças)
+
+**Usuário Admin Padrão:**
+- Email: `admin@exemplo.com`
+- Senha: `senha123`
+
+---
+
 ## 🔮 Melhorias Futuras
 
 - [ ] Notificações push quando instituição fica crítica

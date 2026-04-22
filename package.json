@@ -5,11 +5,11 @@
   "main": "index.js",
   "engines": {
     "node": "18.x"
-    },
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon src/server.js",
-    "start": "node src/server.js", 
+    "start": "node src/server.js",
     "postinstall": "npm rebuild sqlite3"
   },
   "keywords": [],
@@ -21,7 +21,7 @@
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "sqlite": "^5.1.1",
-    "sqlite3": "^6.0.1",
+    "sqlite3": "^5.1.6",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1"
   },
