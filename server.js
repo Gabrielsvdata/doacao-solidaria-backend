@@ -1,9 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const swaggerUi = require("swagger-ui-express");
-const swaggerSpecs = require("./swagger");
-const { criarBanco } = require("./database/database");
-const { validacoes, mensagens } = require("./modules/rules");
+const { criarBanco, validacoes, mensagens } = require("./database");
 
 const instituicoesRoutes = require("./routes/instituicoes");
 const doadorRoutes = require("./routes/doador");
@@ -15,14 +12,6 @@ const PORT = 5000;
 // Middleware
 app.use(cors());
 app.use(express.json());
-
-// Swagger Documentation
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
-  swaggerOptions: {
-    persistAuthorization: true
-  },
-  customCss: `.swagger-ui .topbar { display: none }`
-}));
 
 async function startServer() {
   const db = await criarBanco();
@@ -59,7 +48,6 @@ async function startServer() {
 
   app.listen(PORT, () => {
     console.log(`Servidor rodando em http://localhost:${PORT}`);
-    console.log(`📚 Documentação Swagger: http://localhost:${PORT}/api-docs`);
     console.log("\n========================================");
     console.log("      ROTAS DO SISTEMA DISPONÍVEIS");
     console.log("========================================\n");
@@ -93,8 +81,8 @@ async function startServer() {
     console.log("  PUT    /admin/usuarios/:id         (ativar/desativar)");
     console.log("  DELETE /admin/usuarios/:id         (deletar)");
     
-    console.log("\nADMIN - Doações Recebidas:");
-    console.log("  GET    /admin/doacoes              (listar doações registradas)");
+    console.log("\nADMIN - Recebimentos (Entrada de Doações):");
+    console.log("  GET    /Doações Recebidas:ções registradas)");
     
     console.log("\nADMIN - Distribuições (Saída de Doações):");
     console.log("  POST   /admin/distribuicoes        (registrar distribuição)");
