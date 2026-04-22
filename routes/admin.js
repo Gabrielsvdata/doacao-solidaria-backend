@@ -714,16 +714,17 @@ router.delete("/instituicoes/:id", async (req, res) => {
   const db = req.app.locals.db;
   const { validacoes } = req.app.locals;
   const { id } = req.params;
-  const { usuario_id_logado, senha } = req.body;
 
   try {
-    // 1. Validar parâmetros obrigatórios
-    if (!usuario_id_logado || !senha) {
+    // Validar que req.body existe
+    if (!req.body || typeof req.body !== 'object') {
       return res.status(400).json({
         sucesso: false,
-        erro: "Usuário logado e senha são obrigatórios para deletar"
+        erro: "Corpo da requisição inválido ou ausente"
       });
     }
+
+    const { usuario_id_logado, senha } = req.body;
 
     // 2. Buscar usuário logado e validar senha
     const usuarioLogado = await db.get(
@@ -902,9 +903,18 @@ router.delete("/usuarios/:id", async (req, res) => {
   const db = req.app.locals.db;
   const { validacoes } = req.app.locals;
   const { id } = req.params;
-  const { usuario_id_logado, senha } = req.body;
 
   try {
+    // Validar que req.body existe
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({
+        sucesso: false,
+        erro: "Corpo da requisição inválido ou ausente"
+      });
+    }
+
+    const { usuario_id_logado, senha } = req.body;
+
     // 1. Validar parâmetros obrigatórios
     if (!usuario_id_logado || !senha) {
       return res.status(400).json({
