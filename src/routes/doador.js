@@ -3,8 +3,9 @@
 const express = require("express");
 const router = express.Router();
 
-// Retorna as 3 instituicoes que mais precisam de uma categoria especifica
+// Retorna as instituicoes que mais precisam de uma categoria especifica
 // Busca categoria pelo ID, lista instituicoes ativas ordenadas por menor estoque (LIMIT 3)
+// Lógica inteligente: prioriza instituições em situação crítica ou baixa
 router.post("/recomendacao", async (req, res) => {
   const db = req.app.locals.db;
 
@@ -31,14 +32,21 @@ router.post("/recomendacao", async (req, res) => {
       });
     }
 
-    // Buscar TOP 3 instituições que mais precisam dessa categoria
-    // Ordenar por MENOR percentual (quem mais precisa fica por primeiro)
+    // Buscar instituições que precisam dessa categoria com lógica de priorização:
+    // 1. Instituições com status CRÍTICO ou FALTA (percentual < 20%)
+    // 2. Instituições com status BAIXO (20% <= percentual < 50%)
+    // 3. Ordenar por percentual ASC (menor percentual = maior necessidade)
     const recomendacoes = await db.all(`
       SELECT 
         i.id as instituicao_id,
         i.nome as nome_instituicao,
         i.endereco,
+        i.numero,
+        i.complemento,
+        i.bairro,
         i.cidade,
+        i.estado,
+        i.cep,
         i.telefone,
         i.horario_funcionamento,
         e.quantidade_atual,
@@ -51,7 +59,7 @@ router.post("/recomendacao", async (req, res) => {
       INNER JOIN estoques e ON e.instituicao_id = i.id
       WHERE e.categoria_id = ? AND i.ativo = 1
       ORDER BY percentual ASC
-      LIMIT 3
+      LIMIT 10
     `, [categoria_id]);
 
     if (recomendacoes.length === 0) {
@@ -63,25 +71,75 @@ router.post("/recomendacao", async (req, res) => {
 
     const { validacoes } = req.app.locals;
 
-    // Enriquecer dados com status
-    const recomendacoesComStatus = recomendacoes.map(r => ({
-      instituicao_id: r.instituicao_id,
-      nome: r.nome_instituicao,
-      endereco: r.endereco,
-      cidade: r.cidade,
-      telefone: r.telefone,
-      horario_funcionamento: r.horario_funcionamento,
-      status_estoque: validacoes.obterStatus(r.percentual),
-      percentual_preenchido: r.percentual,
-      quantidade_atual: r.quantidade_atual,
-      capacidade_maxima: r.capacidade_maxima
-    }));
+    // Enriquecer dados com status e priorizar as que mais precisam
+    const recomendacoesComStatus = recomendacoes.map(r => {
+      const status = validacoes.obterStatus(r.percentual);
+      let prioridade = 0;
+      
+      // Atribuir pontuação de prioridade
+      if (status === "FALTA" || status === "CRÍTICO") {
+        prioridade = 3; // Máxima prioridade
+      } else if (status === "BAIXO") {
+        prioridade = 2; // Média prioridade
+      } else if (status === "MÉDIO") {
+        prioridade = 1; // Baixa prioridade
+      }
+      // Status BOM e EXCESSO = prioridade 0 (não recomenda)
+      
+      return {
+        instituicao_id: r.instituicao_id,
+        nome: r.nome_instituicao,
+        endereco: r.endereco,
+        numero: r.numero,
+        complemento: r.complemento,
+        bairro: r.bairro,
+        cidade: r.cidade,
+        estado: r.estado,
+        cep: r.cep,
+        telefone: r.telefone,
+        horario_funcionamento: r.horario_funcionamento,
+        status_estoque: status,
+        percentual_preenchido: r.percentual,
+        quantidade_atual: r.quantidade_atual,
+        capacidade_maxima: r.capacidade_maxima,
+        prioridade: prioridade,
+        recomenda: prioridade >= 2 // Recomenda apenas se CRÍTICO ou BAIXO
+      };
+    });
+
+    // Filtrar instituições por prioridade
+    // 1. Recomendadas: CRÍTICO/FALTA/BAIXO (prioridade >= 2)
+    const recomendacoesAltas = recomendacoesComStatus
+      .filter(r => r.prioridade >= 2)
+      .sort((a, b) => b.prioridade - a.prioridade)
+      .slice(0, 3);
+
+    // 2. Todas: incluindo BOM e MÉDIO (por categoria de prioridade)
+    const todasOrdenadas = recomendacoesComStatus
+      .sort((a, b) => {
+        // Ordenar por prioridade DESC (maior para menor)
+        if (b.prioridade !== a.prioridade) {
+          return b.prioridade - a.prioridade;
+        }
+        // Se mesma prioridade, ordenar por percentual ASC (menor = mais crítico)
+        return a.percentual_preenchido - b.percentual_preenchido;
+      })
+      .slice(0, 10);
+
+    // Remover campos internos (prioridade/recomenda) da resposta
+    const mapaResposta = (arr) => arr.map(({ prioridade, recomenda, ...rest }) => rest);
+
+    // Se não houver recomendações prioritárias, retornar apenas as melhores opções
+    const resultado = recomendacoesAltas.length > 0 
+      ? recomendacoesAltas 
+      : todasOrdenadas.slice(0, 3);
 
     return res.status(200).json({
       sucesso: true,
       categoria: categoria.nome,
-      mensagem: `Encontramos ${recomendacoesComStatus.length} instituição(ões) que precisam de ${categoria.nome}`,
-      recomendacoes: recomendacoesComStatus
+      mensagem: `Encontramos ${resultado.length} instituição(ões) que precisam de ${categoria.nome}`,
+      recomendacoes: mapaResposta(resultado),
+      todas: mapaResposta(todasOrdenadas)
     });
 
   } catch (erro) {

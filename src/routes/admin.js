@@ -1090,13 +1090,13 @@ router.post("/distribuicoes", async (req, res) => {
     try {
       const novaQuantidade = estoque.quantidade_atual - quantidade;
 
-      // 1. Atualizar estoque
+      // 1. Atualizar estoque de origem
       await db.run(
         "UPDATE estoques SET quantidade_atual = ?, atualizada_em = CURRENT_TIMESTAMP WHERE id = ?",
         [novaQuantidade, estoque_id]
       );
 
-      // 2. Registrar movimentação
+      // 2. Registrar movimentação de saída
       const resultMovimentacao = await db.run(`
         INSERT INTO movimentacoes_estoque (estoque_id, usuario_id, tipo, quantidade_diferenca, descricao)
         VALUES (?, ?, 'saida', ?, ?)
@@ -1104,7 +1104,64 @@ router.post("/distribuicoes", async (req, res) => {
 
       const movimentacao_id = resultMovimentacao.lastID;
 
-      // 3. Registrar distribuição
+      // 3. Para TRANSFERÊNCIA: adicionar ao estoque destino
+      let movimentacao_entrada_id = null;
+      if (tipo_saida === 'transferencia') {
+        // Buscar estoque destino pela instituição e categoria
+        let estoqueDestino = await db.get(
+          "SELECT * FROM estoques WHERE instituicao_id = ? AND categoria_id = ?",
+          [instituicao_destino_id, estoque.categoria_id]
+        );
+
+        // Se não existir, criar automaticamente
+        if (!estoqueDestino) {
+          const resultEstoqueNovo = await db.run(`
+            INSERT INTO estoques (instituicao_id, categoria_id, quantidade_atual, capacidade_maxima, atualizada_em)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `, [instituicao_destino_id, estoque.categoria_id, 0, 100]);
+          
+          estoqueDestino = {
+            id: resultEstoqueNovo.lastID,
+            quantidade_atual: 0,
+            capacidade_maxima: 100,
+            instituicao_id: instituicao_destino_id,
+            categoria_id: estoque.categoria_id
+          };
+        }
+
+        // Atualizar estoque destino (adicionar)
+        const novaQuantidadeDestino = estoqueDestino.quantidade_atual + quantidade;
+        
+        // Validar que não ultrapassa capacidade no destino
+        if (novaQuantidadeDestino > estoqueDestino.capacidade_maxima) {
+          await db.run("ROLLBACK");
+          return res.status(400).json({
+            sucesso: false,
+            erro: `Capacidade insuficiente no destino. Máximo: ${estoqueDestino.capacidade_maxima}, Tentativa: ${novaQuantidadeDestino}`
+          });
+        }
+        
+        await db.run(
+          "UPDATE estoques SET quantidade_atual = ?, atualizada_em = CURRENT_TIMESTAMP WHERE id = ?",
+          [novaQuantidadeDestino, estoqueDestino.id]
+        );
+
+        // Registrar movimentação de entrada no destino
+        const resultMovimentacaoEntrada = await db.run(`
+          INSERT INTO movimentacoes_estoque (estoque_id, usuario_id, tipo, quantidade_diferenca, descricao)
+          VALUES (?, ?, 'entrada', ?, ?)
+        `, [estoqueDestino.id, usuario_id, quantidade, `Transferência recebida - ${motivo || 'Transferência'}`]);
+
+        movimentacao_entrada_id = resultMovimentacaoEntrada.lastID;
+
+        // Registrar no histórico de auditoria do destino
+        await db.run(`
+          INSERT INTO historico_estoques (estoque_id, quantidade_anterior, quantidade_nova, usuario_id, movimentacao_estoque_id, motivo)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `, [estoqueDestino.id, estoqueDestino.quantidade_atual, novaQuantidadeDestino, usuario_id, movimentacao_entrada_id, `Transferência recebida - ${tipo_saida}`]);
+      }
+
+      // 4. Registrar distribuição
       await db.run(`
         INSERT INTO distribuicoes (movimentacao_estoque_id, tipo_saida, beneficiario_nome, beneficiario_telefone, beneficiario_cpf, instituicao_destino_id, quantidade_distribuida, motivo)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -1119,7 +1176,7 @@ router.post("/distribuicoes", async (req, res) => {
         motivo || null
       ]);
 
-      // 4. Registrar no histórico de auditoria
+      // 5. Registrar no histórico de auditoria (origem)
       await db.run(`
         INSERT INTO historico_estoques (estoque_id, quantidade_anterior, quantidade_nova, usuario_id, movimentacao_estoque_id, motivo)
         VALUES (?, ?, ?, ?, ?, ?)
