@@ -16,11 +16,11 @@ const options = {
     },
     servers: [
       {
-        url: 'http://localhost:3000',
+        url: 'http://localhost:5000',
         description: 'Servidor de Desenvolvimento'
       },
       {
-        url: 'https://api.doacao-solidaria.com',
+        url: 'https://doacao-solidaria-backend.onrender.com',
         description: 'Servidor de Produção'
       }
     ],
