@@ -3,18 +3,18 @@
 const express = require("express");
 const router = express.Router();
 
-// Recomenda instituições por criticidade de estoque
+// Retorna as 3 instituicoes que mais precisam de uma categoria especifica
+// Busca categoria pelo ID, lista instituicoes ativas ordenadas por menor estoque (LIMIT 3)
 router.post("/recomendacao", async (req, res) => {
   const db = req.app.locals.db;
 
   try {
     const { categoria_id } = req.body;
 
-    // Validar categoria
-    if (!categoria_id) {
+    if (!categoria_id || isNaN(categoria_id)) {
       return res.status(400).json({
         sucesso: false,
-        erro: "categoria_id é obrigatório"
+        erro: "categoria_id é obrigatório e deve ser um número"
       });
     }
 
@@ -31,7 +31,7 @@ router.post("/recomendacao", async (req, res) => {
       });
     }
 
-    // Buscar TODAS as instituições com seus estoques
+    // Buscar TOP 3 instituições que mais precisam dessa categoria
     // Ordenar por MENOR percentual (quem mais precisa fica por primeiro)
     const recomendacoes = await db.all(`
       SELECT 
@@ -40,13 +40,18 @@ router.post("/recomendacao", async (req, res) => {
         i.endereco,
         i.cidade,
         i.telefone,
+        i.horario_funcionamento,
         e.quantidade_atual,
         e.capacidade_maxima,
-        ROUND((e.quantidade_atual / e.capacidade_maxima) * 100, 2) as percentual
+        CASE WHEN e.capacidade_maxima > 0
+          THEN ROUND((e.quantidade_atual * 1.0 / e.capacidade_maxima) * 100, 2)
+          ELSE 0
+        END as percentual
       FROM instituicoes i
       INNER JOIN estoques e ON e.instituicao_id = i.id
       WHERE e.categoria_id = ? AND i.ativo = 1
       ORDER BY percentual ASC
+      LIMIT 3
     `, [categoria_id]);
 
     if (recomendacoes.length === 0) {
@@ -56,38 +61,27 @@ router.post("/recomendacao", async (req, res) => {
       });
     }
 
-    // Função para definir status
-    const obterStatus = (percentual) => {
-      if (percentual === 0) return "FALTA";
-      if (percentual < 20) return "CRÍTICO";
-      if (percentual < 50) return "BAIXO";
-      if (percentual < 80) return "MÉDIO";
-      if (percentual <= 100) return "BOM";
-      return "EXCESSO";
-    };
+    const { validacoes } = req.app.locals;
 
-    // Enriquecer dados com status e horário
+    // Enriquecer dados com status
     const recomendacoesComStatus = recomendacoes.map(r => ({
       instituicao_id: r.instituicao_id,
       nome: r.nome_instituicao,
       endereco: r.endereco,
       cidade: r.cidade,
       telefone: r.telefone,
-      horario_funcionamento: "08:00 - 18:00",
-      status_estoque: obterStatus(r.percentual),
+      horario_funcionamento: r.horario_funcionamento,
+      status_estoque: validacoes.obterStatus(r.percentual),
       percentual_preenchido: r.percentual,
       quantidade_atual: r.quantidade_atual,
       capacidade_maxima: r.capacidade_maxima
     }));
 
-    // Retornar TOP 3 com MENOS estoque (os que mais precisam)
-    const top3 = recomendacoesComStatus.slice(0, 3);
-
     return res.status(200).json({
       sucesso: true,
       categoria: categoria.nome,
-      mensagem: `Encontramos ${top3.length} instituição(ões) que precisam de ${categoria.nome}`,
-      recomendacoes: top3
+      mensagem: `Encontramos ${recomendacoesComStatus.length} instituição(ões) que precisam de ${categoria.nome}`,
+      recomendacoes: recomendacoesComStatus
     });
 
   } catch (erro) {
@@ -99,7 +93,8 @@ router.post("/recomendacao", async (req, res) => {
   }
 });
 
-// Lista todas as categorias disponíveis
+// Retorna lista de todas as categorias disponiveis
+// SELECT em categorias ordenado por nome
 router.get("/categorias", async (req, res) => {
   const db = req.app.locals.db;
 

@@ -1,66 +1,8 @@
 const express = require("express");
 const router = express.Router();
 
-// Lista todas as instituições com horários
-router.get("/", async (req, res) => {
-  const db = req.app.locals.db;
-
-  try {
-    const instituicoes = await db.all(`
-      SELECT 
-        id,
-        nome,
-        endereco,
-        numero,
-        complemento,
-        bairro,
-        cidade,
-        estado,
-        cep,
-        latitude,
-        longitude,
-        telefone,
-        ativo
-      FROM instituicoes
-      WHERE ativo = 1
-      ORDER BY nome
-    `);
-
-    // Enriquecer com horário padrão
-    const comHorario = instituicoes.map(inst => ({
-      id: inst.id,
-      nome: inst.nome,
-      endereco: inst.endereco,
-      numero: inst.numero,
-      complemento: inst.complemento,
-      bairro: inst.bairro,
-      cidade: inst.cidade,
-      estado: inst.estado,
-      cep: inst.cep,
-      telefone: inst.telefone,
-      horario_funcionamento: "08:00 - 18:00",
-      localizacao: {
-        latitude: inst.latitude,
-        longitude: inst.longitude
-      }
-    }));
-
-    return res.status(200).json({
-      sucesso: true,
-      total: comHorario.length,
-      instituicoes: comHorario
-    });
-
-  } catch (erro) {
-    console.error("Erro em GET /instituicoes:", erro);
-    return res.status(500).json({
-      sucesso: false,
-      erro: "Erro ao buscar instituições"
-    });
-  }
-});
-
-// Detalhes de uma instituição específica
+// Retorna detalhes de uma instituicao especifica com seus estoques
+// Busca instituicao pelo ID, lista estoques com percentual de preenchimento
 router.get("/:id", async (req, res) => {
   const db = req.app.locals.db;
   const { id } = req.params;
@@ -77,11 +19,8 @@ router.get("/:id", async (req, res) => {
         cidade,
         estado,
         cep,
-        latitude,
-        longitude,
         telefone,
-        ativo,
-        criada_em
+        horario_funcionamento
       FROM instituicoes
       WHERE id = ? AND ativo = 1
     `, [id]);
@@ -101,46 +40,32 @@ router.get("/:id", async (req, res) => {
         c.nome as categoria,
         e.quantidade_atual,
         e.capacidade_maxima,
-        ROUND((e.quantidade_atual / e.capacidade_maxima) * 100, 2) as percentual
+        CASE WHEN e.capacidade_maxima > 0
+          THEN ROUND((e.quantidade_atual * 1.0 / e.capacidade_maxima) * 100, 2)
+          ELSE 0
+        END as percentual
       FROM estoques e
       INNER JOIN categorias c ON e.categoria_id = c.id
       WHERE e.instituicao_id = ?
-      ORDER BY percentual ASC
+      ORDER BY c.nome ASC
     `, [id]);
 
-    // Adicionar status a cada estoque
-    const estoqueComStatus = estoques.map(e => {
-      let status = "BOM";
-      if (e.percentual === 0) status = "FALTA";
-      else if (e.percentual < 20) status = "CRÍTICO";
-      else if (e.percentual < 50) status = "BAIXO";
-      else if (e.percentual < 80) status = "MÉDIO";
-      
+    const { validacoes, mensagens } = req.app.locals;
+
+    // Adicionar status e mensagem de criticidade a cada estoque
+    const estoqueComStatus = estoques.map(({ percentual, ...rest }) => {
+      const status = validacoes.obterStatus(percentual);
       return {
-        ...e,
-        status
+        ...rest,
+        percentual_preenchido: percentual,
+        status_estoque: status,
+        mensagem_status: mensagens.criticidade(status, rest.categoria, instituicao.nome)
       };
     });
 
     return res.status(200).json({
       sucesso: true,
-      instituicao: {
-        id: instituicao.id,
-        nome: instituicao.nome,
-        endereco: instituicao.endereco,
-        numero: instituicao.numero,
-        complemento: instituicao.complemento,
-        bairro: instituicao.bairro,
-        cidade: instituicao.cidade,
-        estado: instituicao.estado,
-        cep: instituicao.cep,
-        telefone: instituicao.telefone,
-        horario_funcionamento: "08:00 - 18:00",
-        localizacao: {
-          latitude: instituicao.latitude,
-          longitude: instituicao.longitude
-        }
-      },
+      instituicao,
       estoques: estoqueComStatus
     });
 

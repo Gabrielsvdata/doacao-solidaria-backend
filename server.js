@@ -1,23 +1,25 @@
 const express = require("express");
-const { criarBanco, validacoes } = require("./database");
+const cors = require("cors");
+const { criarBanco, validacoes, mensagens } = require("./database");
 
 const instituicoesRoutes = require("./routes/instituicoes");
 const doadorRoutes = require("./routes/doador");
 const adminRoutes = require("./routes/admin");
-const usuariosRoutes = require("./routes/usuarios");
 
 const app = express();
 const PORT = 3000;
 
 // Middleware
+app.use(cors());
 app.use(express.json());
 
 async function startServer() {
   const db = await criarBanco();
 
-  // disponibiliza o banco e validacoes
+  // disponibiliza o banco, validacoes e mensagens
   app.locals.db = db;
   app.locals.validacoes = validacoes;
+  app.locals.mensagens = mensagens;
 
   // Rotas principais
   app.use("/doador", doadorRoutes);
@@ -27,64 +29,67 @@ async function startServer() {
   
   // Admin - Gerenciamento completo
   app.use("/admin", adminRoutes);
-  
-  // Usuários - Autenticação
-  app.use("/usuarios", usuariosRoutes);
 
-  // Middleware de erro global - Centraliza tratamento de erros
   app.use((err, req, res, next) => {
-    console.error("ERRO:", {
-      mensagem: err.message,
-      stack: err.stack,
-      rota: req.path,
-      metodo: req.method,
-      timestamp: new Date().toISOString()
-    });
+    console.error("Erro:", err.message);
 
-    // Erro de validação
-    if (err.name === "ValidationError") {
-      return res.status(400).json({
-        erro: "Dados inválidos",
-        detalhes: err.message
-      });
-    }
-
-    // Erro genérico
     res.status(err.status || 500).json({
-      erro: err.message || "Erro interno do servidor",
-      ...(process.env.NODE_ENV === "development" && { stack: err.stack })
+      sucesso: false,
+      erro: err.message || "Erro interno do servidor"
     });
   });
 
-  // Rota 404 - Requisições não encontradas
   app.use((req, res) => {
     res.status(404).json({
-      erro: "Rota não encontrada",
-      metodo: req.method,
-      caminho: req.path
+      sucesso: false,
+      erro: "Rota não encontrada"
     });
   });
 
   app.listen(PORT, () => {
     console.log(`Servidor rodando em http://localhost:${PORT}`);
-    console.log("\n--- ROTAS DISPONÍVEIS ---\n");
+    console.log("\n========================================");
+    console.log("      ROTAS DO SISTEMA DISPONÍVEIS");
+    console.log("========================================\n");
+    
     console.log("DOADOR (Sem autenticação):");
     console.log("  GET    /doador/categorias");
     console.log("  POST   /doador/recomendacao");
+    
     console.log("\nINSTITUIÇÕES (Sem autenticação):");
-    console.log("  GET    /instituicoes");
     console.log("  GET    /instituicoes/:id");
-    console.log("\nLOGIN:");
-    console.log("  POST   /usuarios/login");
-    console.log("       { email: 'admin@exemplo.com', senha: 'senha123' }");
-    console.log("\nADMIN (Com autenticação):");
-    console.log("  GET    /admin/estoque              (listar estoques críticos)");
+    
+    console.log("\nADMIN - Autenticação:");
+    console.log("  POST   /admin/login");
+    console.log("       Body: { email: 'admin@exemplo.com', senha: 'senha123' }");
+    
+    console.log("\nADMIN - Estoques:");
+    console.log("  GET    /admin/estoque              (listar todos os estoques)");
     console.log("  PUT    /admin/estoque/:id          (atualizar quantidade)");
-    console.log("  GET    /admin/analise              (dashboard/gráficos)");
-    console.log("  GET    /admin/instituicoes         (listar instituições)");
-    console.log("  POST   /admin/instituicoes         (criar instituição)");
-    console.log("  DELETE /admin/instituicoes/:id     (deletar instituição)");
-    console.log("\n--- FIM DAS ROTAS ---\n");
+    
+    console.log("\nADMIN - Análise e Dashboard:");
+    console.log("  GET    /admin/analise              (dashboard geral)");
+    
+    console.log("\nADMIN - Gerenciamento de Instituições:");
+    console.log("  GET    /admin/instituicoes         (listar todas)");
+    console.log("  POST   /admin/instituicoes         (criar nova)");
+    console.log("  DELETE /admin/instituicoes/:id     (deletar/desativar)");
+    
+    console.log("\nADMIN - Gerenciamento de Usuários:");
+    console.log("  GET    /admin/usuarios             (listar todos)");
+    console.log("  POST   /admin/usuarios             (cadastrar novo)");
+    console.log("  PUT    /admin/usuarios/:id         (ativar/desativar)");
+    console.log("  DELETE /admin/usuarios/:id         (deletar)");
+    
+    console.log("\nADMIN - Recebimentos (Entrada de Doações):");
+    console.log("  GET    /Doações Recebidas:ções registradas)");
+    
+    console.log("\nADMIN - Distribuições (Saída de Doações):");
+    console.log("  POST   /admin/distribuicoes        (registrar distribuição)");
+    console.log("  GET    /admin/distribuicoes        (listar histórico)");
+    console.log("  GET    /admin/distribuicoes-carregamento (dados para formulário)");
+    
+    console.log("\n========================================\n");
   });
 }
 
