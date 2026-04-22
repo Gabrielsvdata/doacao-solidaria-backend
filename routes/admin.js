@@ -707,13 +707,48 @@ router.post("/instituicoes", async (req, res) => {
   }
 });
 
-// Deleta instituicao (soft delete se tiver estoque ou historico)
-// Verifica estoque e movimentacoes, faz soft delete se houver, senao deleta permanentemente
+// Deleta instituicao (com validação de segurança)
+// Verifica: senha do usuário logado, estoque, movimentações
+// Soft delete se houver dados, hard delete se limpeza
 router.delete("/instituicoes/:id", async (req, res) => {
   const db = req.app.locals.db;
+  const { validacoes } = req.app.locals;
   const { id } = req.params;
+  const { usuario_id_logado, senha } = req.body;
 
   try {
+    // 1. Validar parâmetros obrigatórios
+    if (!usuario_id_logado || !senha) {
+      return res.status(400).json({
+        sucesso: false,
+        erro: "Usuário logado e senha são obrigatórios para deletar"
+      });
+    }
+
+    // 2. Buscar usuário logado e validar senha
+    const usuarioLogado = await db.get(
+      "SELECT id, email, senha FROM usuarios WHERE id = ? AND ativo = 1",
+      [usuario_id_logado]
+    );
+
+    if (!usuarioLogado) {
+      return res.status(401).json({
+        sucesso: false,
+        erro: "Usuário logado não encontrado ou inativo"
+      });
+    }
+
+    // 3. Validar senha do usuário logado
+    const senhaCorreta = await validacoes.verificarSenha(senha, usuarioLogado.senha);
+
+    if (!senhaCorreta) {
+      return res.status(401).json({
+        sucesso: false,
+        erro: "Senha incorreta. Ação não autorizada"
+      });
+    }
+
+    // 4. Buscar instituição
     const instituicao = await db.get(
       "SELECT * FROM instituicoes WHERE id = ?",
       [id]
@@ -726,6 +761,7 @@ router.delete("/instituicoes/:id", async (req, res) => {
       });
     }
 
+    // 5. Verificar total de estoque
     const totalEstoque = await db.get(
       "SELECT COALESCE(SUM(quantidade_atual), 0) as total FROM estoques WHERE instituicao_id = ?",
       [id]
@@ -737,12 +773,13 @@ router.delete("/instituicoes/:id", async (req, res) => {
 
       return res.status(200).json({
         sucesso: true,
-        mensagem: "Instituição desativada (possui estoque vinculado)",
+        mensagem: "Instituição desativada (possui estoque vinculado). Os dados foram preservados",
+        acao_realizada: "soft_delete",
         total_estoque: totalEstoque.total
       });
     }
 
-    // Verifica se tem movimentações vinculadas
+    // 6. Verificar se tem movimentações vinculadas
     const temMovimentacoes = await db.get(`
       SELECT COUNT(*) as total FROM movimentacoes_estoque m
       INNER JOIN estoques e ON m.estoque_id = e.id
@@ -755,17 +792,20 @@ router.delete("/instituicoes/:id", async (req, res) => {
 
       return res.status(200).json({
         sucesso: true,
-        mensagem: "Instituição desativada (possui histórico de movimentações)"
+        mensagem: "Instituição desativada (possui histórico de movimentações). Os dados foram preservados para auditoria",
+        acao_realizada: "soft_delete",
+        total_movimentacoes: temMovimentacoes.total
       });
     }
 
-    // Delete real: sem estoque e sem histórico
+    // 7. Hard delete: sem estoque e sem histórico
     await db.run("DELETE FROM estoques WHERE instituicao_id = ?", [id]);
     await db.run("DELETE FROM instituicoes WHERE id = ?", [id]);
 
     return res.status(200).json({
       sucesso: true,
-      mensagem: "Instituição removida permanentemente"
+      mensagem: "Instituição removida permanentemente com sucesso",
+      acao_realizada: "hard_delete"
     });
 
   } catch (erro) {
@@ -856,30 +896,92 @@ router.put("/usuarios/:id", async (req, res) => {
   }
 });
 
-// Deleta usuario (soft delete)
-// UPDATE em usuarios, muda ativo para 0 (nao deleta dados)
+// Deleta usuario (hard delete com validação de segurança)
+// Valida: usuario_id do logado, senha, impede auto-delete, verifica movimentações
 router.delete("/usuarios/:id", async (req, res) => {
   const db = req.app.locals.db;
+  const { validacoes } = req.app.locals;
   const { id } = req.params;
+  const { usuario_id_logado, senha } = req.body;
 
   try {
-    const usuario = await db.get("SELECT id FROM usuarios WHERE id = ?", [id]);
+    // 1. Validar parâmetros obrigatórios
+    if (!usuario_id_logado || !senha) {
+      return res.status(400).json({
+        sucesso: false,
+        erro: "Usuário logado e senha são obrigatórios para deletar"
+      });
+    }
 
-    if (!usuario) {
+    // 2. Validar se está tentando deletar a si mesmo
+    if (parseInt(id) === parseInt(usuario_id_logado)) {
+      return res.status(403).json({
+        sucesso: false,
+        erro: "Você não pode deletar sua própria conta. Para isso, entre em contato com um administrador"
+      });
+    }
+
+    // 3. Buscar usuário logado e validar senha
+    const usuarioLogado = await db.get(
+      "SELECT id, email, senha FROM usuarios WHERE id = ? AND ativo = 1",
+      [usuario_id_logado]
+    );
+
+    if (!usuarioLogado) {
+      return res.status(401).json({
+        sucesso: false,
+        erro: "Usuário logado não encontrado ou inativo"
+      });
+    }
+
+    // 4. Validar senha do usuário logado
+    const senhaCorreta = await validacoes.verificarSenha(senha, usuarioLogado.senha);
+
+    if (!senhaCorreta) {
+      return res.status(401).json({
+        sucesso: false,
+        erro: "Senha incorreta. Ação não autorizada"
+      });
+    }
+
+    // 5. Buscar usuário a ser deletado
+    const usuarioADeletar = await db.get(
+      "SELECT id FROM usuarios WHERE id = ?",
+      [id]
+    );
+
+    if (!usuarioADeletar) {
       return res.status(404).json({
         sucesso: false,
         erro: "Usuário não encontrado"
       });
     }
 
-    await db.run(
-      "UPDATE usuarios SET ativo = 0, atualizada_em = CURRENT_TIMESTAMP WHERE id = ?",
-      [id]
-    );
+    // 6. Verificar se tem movimentações vinculadas
+    const temMovimentacoes = await db.get(`
+      SELECT COUNT(*) as total FROM movimentacoes_estoque
+      WHERE usuario_id = ?
+    `, [id]);
+
+    if (temMovimentacoes.total > 0) {
+      // Soft delete: tem histórico, apenas desativa
+      await db.run("UPDATE usuarios SET ativo = 0, atualizada_em = CURRENT_TIMESTAMP WHERE id = ?", [id]);
+
+      return res.status(200).json({
+        sucesso: true,
+        mensagem: "Usuário desativado (possui histórico de movimentações). Os dados foram preservados para auditoria",
+        acao_realizada: "soft_delete",
+        total_movimentacoes: temMovimentacoes.total
+      });
+    }
+
+    // 7. Hard delete: sem histórico
+    await db.run("DELETE FROM usuarios WHERE id = ?", [id]);
 
     return res.status(200).json({
       sucesso: true,
-      mensagem: "Usuário deletado com sucesso"
+      mensagem: "Usuário removido permanentemente com sucesso",
+      acao_realizada: "hard_delete"
     });
 
   } catch (erro) {
