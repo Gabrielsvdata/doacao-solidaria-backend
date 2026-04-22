@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
-const { criarBanco, validacoes, mensagens } = require("./database");
+const { criarBanco } = require("./database/database");
+const { validacoes, mensagens } = require("./modules/rules");
 
 const instituicoesRoutes = require("./routes/instituicoes");
 const doadorRoutes = require("./routes/doador");
@@ -81,8 +82,8 @@ async function startServer() {
     console.log("  PUT    /admin/usuarios/:id         (ativar/desativar)");
     console.log("  DELETE /admin/usuarios/:id         (deletar)");
     
-    console.log("\nADMIN - Recebimentos (Entrada de Doações):");
-    console.log("  GET    /Doações Recebidas:ções registradas)");
+    console.log("\nADMIN - Doações Recebidas:");
+    console.log("  GET    /admin/doacoes              (listar doações registradas)");
     
     console.log("\nADMIN - Distribuições (Saída de Doações):");
     console.log("  POST   /admin/distribuicoes        (registrar distribuição)");
