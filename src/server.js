@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpecs = require("./swagger");
-const { criarBanco } = require("./database/database");
+const { criarBanco } = require("../database");
 const { validacoes, mensagens } = require("./modules/rules");
 
 const instituicoesRoutes = require("./routes/instituicoes");
