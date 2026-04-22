@@ -1,14 +1,13 @@
-// Arquivo raiz que inicia o servidor
-// Necessário para evitar problemas de path em deployments (Render, Heroku, etc)
-
-require('./src/server');
 const express = require("express");
 const cors = require("cors");
-const { criarBanco, validacoes, mensagens } = require("./database");
+const swaggerUi = require("swagger-ui-express");
+const swaggerSpecs = require("./swagger");
+const { criarBanco } = require("./database");
+const { validacoes, mensagens } = require("./rules");
 
-const instituicoesRoutes = require("./routes/instituicoes");
-const doadorRoutes = require("./routes/doador");
-const adminRoutes = require("./routes/admin");
+const instituicoesRoutes = require("./instituicoes");
+const doadorRoutes = require("./doador");
+const adminRoutes = require("./admin");
 
 const app = express();
 const PORT = 5000;
@@ -16,6 +15,14 @@ const PORT = 5000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Swagger Documentation
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
+  swaggerOptions: {
+    persistAuthorization: true
+  },
+  customCss: `.swagger-ui .topbar { display: none }`
+}));
 
 async function startServer() {
   const db = await criarBanco();

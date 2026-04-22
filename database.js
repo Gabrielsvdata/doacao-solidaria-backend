@@ -1,6 +1,6 @@
 const sqlite3 = require("sqlite3");
 const { open } = require("sqlite");
-const { validacoes } = require("./src/modules/rules");
+const { validacoes } = require("./rules");
 
 /**
  * BANCO DE DADOS
