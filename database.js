@@ -200,6 +200,34 @@ const criarBanco = async () => {
     CREATE INDEX IF NOT EXISTS idx_distribuicoes_data ON distribuicoes(data_distribuicao);
   `);
 
+  // ==========================================
+  // TABELA: doacoes (NOVO)
+  // Registro de doações agendadas e validação
+  // ==========================================
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS doacoes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      doador_nome TEXT NOT NULL,
+      doador_telefone TEXT NOT NULL,
+      categoria_id INTEGER NOT NULL,
+      quantidade REAL NOT NULL CHECK(quantidade > 0),
+      unidade TEXT NOT NULL CHECK(unidade IN ('un', 'kg', 'L')),
+      instituicao_id INTEGER,
+      data_agendamento DATETIME NOT NULL,
+      data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP,
+      data_validacao DATETIME,
+      status TEXT DEFAULT 'AGENDADA' CHECK(status IN ('AGENDADA', 'NO_DIA', 'PENDENTE', 'APROVADA', 'REJEITADA', 'VENCIDA')),
+      motivo_rejeicao TEXT,
+      sla_dias INTEGER DEFAULT 2,
+      FOREIGN KEY (categoria_id) REFERENCES categorias(id),
+      FOREIGN KEY (instituicao_id) REFERENCES instituicoes(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_doacoes_status ON doacoes(status);
+    CREATE INDEX IF NOT EXISTS idx_doacoes_data_agendamento ON doacoes(data_agendamento);
+    CREATE INDEX IF NOT EXISTS idx_doacoes_doador ON doacoes(doador_telefone);
+  `);
+
   console.log("Banco de dados inicializado!");
 
   // ==========================================

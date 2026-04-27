@@ -8,6 +8,7 @@ const { validacoes, mensagens } = require("./rules");
 const instituicoesRoutes = require("./instituicoes");
 const doadorRoutes = require("./doador");
 const adminRoutes = require("./admin");
+const doacoesRoutes = require("./doacoes");
 
 const app = express();
 const PORT = 5000;
@@ -37,6 +38,9 @@ async function startServer() {
   
   // Instituições - Informações públicas
   app.use("/instituicoes", instituicoesRoutes);
+  
+  // Doações - Sistema de validação
+  app.use("/doacoes", doacoesRoutes);
   
   // Admin - Gerenciamento completo
   app.use("/admin", adminRoutes);
@@ -80,6 +84,12 @@ async function startServer() {
     
     console.log("\nADMIN - Análise e Dashboard:");
     console.log("  GET    /admin/analise              (dashboard geral)");
+    
+    console.log("\nDOAÇÕES - Sistema de Validação:");
+    console.log("  POST   /doacoes                   (registrar nova doação)");
+    console.log("  GET    /doacoes                   (listar com filtros)");
+    console.log("  GET    /doacoes/:id               (detalhes de uma doação)");
+    console.log("  PUT    /doacoes/:id/validar       (aprovar ou rejeitar)");
     
     console.log("\nADMIN - Gerenciamento de Instituições:");
     console.log("  GET    /admin/instituicoes         (listar todas)");
