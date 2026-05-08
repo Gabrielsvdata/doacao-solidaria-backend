@@ -33,6 +33,21 @@ async function startServer() {
   app.locals.validacoes = validacoes;
   app.locals.mensagens = mensagens;
 
+// Rota raiz - Informações básicas da API
+    app.get('/', (req, res) => {
+    res.json({
+      sucesso: true,
+      mensagem: "API Doação Solidária rodando",
+      documentacao: "/api-docs",
+      endpoints: {
+        doador: "/doador",
+        instituicoes: "/instituicoes",
+        admin: "/admin",
+        doacoes: "/doacoes"
+      }
+    });
+  });
+
   // Rotas principais
   app.use("/doador", doadorRoutes);
   
